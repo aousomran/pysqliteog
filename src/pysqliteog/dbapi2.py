@@ -1,10 +1,12 @@
-import grpc
-from .gen.sqliteog_pb2_grpc import SqliteOGStub
-from .gen.sqliteog_pb2 import *
 import datetime
 from ast import literal_eval
 from queue import Queue
 from threading import Thread
+
+import grpc
+
+from .gen.sqliteog_pb2_grpc import SqliteOGStub
+from .gen.sqliteog_pb2 import *
 from .errors import *
 
 # Globals
