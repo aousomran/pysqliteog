@@ -6,11 +6,11 @@ specification.
 
 # Installation
 
-This library requires `grpc` to be installed
-
 ```shell
-pip install grpcio grpcio-tools
+pip install pysqliteog
 ```
+This will install `pysqliteog` along with it's dependencies
+`grpcio` & `protobuf`
 
 # Usage
 

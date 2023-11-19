@@ -5,7 +5,7 @@ import datetime
 from ast import literal_eval
 from queue import Queue
 from threading import Thread
-from errors import *
+from .errors import *
 
 # Globals
 paramstyle = "qmark"
@@ -14,7 +14,7 @@ apilevel = "2.0"
 PARSE_COLNAMES = 2
 PARSE_DECLTYPES = 1
 sqlite_version = '3.31.1'
-version = '0.0.1'
+version = '0.0.4'
 version_info = tuple([int(x) for x in version.split(".")])
 sqlite_version_info = tuple([int(x) for x in sqlite_version.split(".")])
 
