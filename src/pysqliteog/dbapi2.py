@@ -1,11 +1,11 @@
 import grpc
 from .gen.sqliteog_pb2_grpc import SqliteOGStub
 from .gen.sqliteog_pb2 import *
-from pprint import pprint
 import datetime
 from ast import literal_eval
 from queue import Queue
 from threading import Thread
+from errors import *
 
 # Globals
 paramstyle = "qmark"
@@ -21,60 +21,6 @@ sqlite_version_info = tuple([int(x) for x in sqlite_version.split(".")])
 Date = datetime.date
 Time = datetime.time
 Timestamp = datetime.datetime
-SPAM_LOGS = False
-
-
-def log(msg):
-    if SPAM_LOGS:
-        pprint(msg)
-
-
-def func_logger(func):
-    def wrapper(*args, **kwargs):
-        log(f"Call to function: ### {func.__name__} ### with args: {args} & kwargs: {kwargs}")
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
-class Warning(Exception):
-    pass
-
-
-class Error(Exception):
-    pass
-
-
-class InterfaceError(Error):
-    pass
-
-
-class DatabaseError(Error):
-    pass
-
-
-class DataError(DatabaseError):
-    pass
-
-
-class OperationalError(DatabaseError):
-    pass
-
-
-class IntegrityError(DatabaseError):
-    pass
-
-
-class InternalError(DatabaseError):
-    pass
-
-
-class ProgrammingError(DatabaseError):
-    pass
-
-
-class NotSupportedError(DatabaseError):
-    pass
 
 
 # Connection
@@ -98,27 +44,22 @@ class Connection:
     def function_register(self):
         return self._function_register
 
-    @func_logger
     def __init__(self, host, port, dbname):
         self._db_name = dbname
         self.channel = grpc.insecure_channel(f"{host}:{port}")
         self.grpc_stub = SqliteOGStub(self.channel)
 
-    @func_logger
     def __enter__(self):
         return self
 
-    @func_logger
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    @func_logger
     def close(self):
         # fire a call to close our remote db connection, before closing the grpc channel
         self.grpc_stub.Close(ConnectionId(id=self.cnx_id))
         self.channel.close()
 
-    @func_logger
     def initialize_remote_connection(self):
         resp: ConnectionId = self.grpc_stub.Connection(
             ConnectionRequest(db_name=self._db_name, functions=self._function_register.keys())
@@ -126,15 +67,12 @@ class Connection:
         self._cnx_id = resp.id
         self.initialized = True
 
-    @func_logger
     def commit(self):
         pass
 
-    @func_logger
     def rollback(self):
         pass
 
-    @func_logger
     def cursor(self, factory=None):
         # let's initialize our connection before the first cursor call
         # we're waiting this long to make sure that all custom functions
@@ -145,7 +83,6 @@ class Connection:
             return factory(self)
         return Cursor(self)
 
-    @func_logger
     def execute(self, sql, params=None):
         """
         for some reason the sqlite dbapi supports execute directly on the connection
@@ -155,14 +92,12 @@ class Connection:
         cursor.execute(sql, params)
         return cursor
 
-    @func_logger
     def create_function(self, *args, **kwargs):
         name = args[0]
         num_args = args[1]
         func = args[2]
         self._function_register[name] = func
 
-    @func_logger
     def create_aggregate(self, *args, **kwargs):
         pass
 
@@ -193,26 +128,21 @@ class Cursor:
     def lastrowid(self):
         return self._last_insert_id
 
-    @func_logger
     def __init__(self, connection):
         self.connection = connection
         self.grpc_stub = self.connection.grpc_stub
         self._init_callback()
 
-    @func_logger
     def __enter__(self):
         return self
 
-    @func_logger
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    @func_logger
     def _process_invocations(self):
         try:
             # blocks until we get an invocation from the generator
             for invoke in self._callback_invocations:
-                log(f"got invoke: {invoke}")
                 function = self.connection.function_register.get(invoke.functionName)
                 if not function:
                     raise Error(f"function {invoke.functionName} not registered")
@@ -223,16 +153,12 @@ class Cursor:
             if e.code() != grpc.StatusCode.CANCELLED:
                 raise e
 
-    @func_logger
     def _invocation_results_iterator(self):
         # block until we get a result from queue, the sentinel value should end the iterator
         for i in iter(self._callback_queue.get, self._sentinel):
             if i != self._sentinel:
-                log(f"got message in send queue: {i} ... sending")
                 yield InvocationResult(result=[f"{i}"])
-        log("iterator done")
 
-    @func_logger
     def _init_callback(self):
         self._callback_queue = Queue(maxsize=0)
         # add the connection id to the request metadata
@@ -241,12 +167,10 @@ class Cursor:
         self._callback_thread = Thread(target=self._process_invocations)
         self._callback_thread.start()
 
-    @func_logger
     def close(self, *args, **kwargs):
         """ Closes the cursor. """
         self._callback_invocations.cancel()
         self._callback_thread.join(0)
-        log(f"thread alive: {self._callback_thread.is_alive()}")
 
     def _prepare_params(self, params):
         if params and len(params) > 0:
@@ -276,7 +200,6 @@ class Cursor:
         self._last_insert_id = -1
         self._affected_rows = -1
 
-    @func_logger
     def execute(self, sql, params=None):
         """
         Executes remote query & put the result in the buffer
@@ -286,31 +209,24 @@ class Cursor:
         self.reset_buffer()
         # we require all string params for now
         params = self._prepare_params(params)
-        # log(f"########{type(sql)}")
-        # log(f"########{type(params)}")
         self._statement = Statement(sql=sql, params=params, cnx_id=self.connection.cnx_id)
         results: ExecuteOrQueryResult = self.grpc_stub.ExecuteOrQuery(self._statement)
         self._results_to_buffer(results)
-        # log(f"EXECUTE DONE: CURRENT BUFFER {self._rows}")
         return self
 
-    @func_logger
     def executemany(self, *args, **kwargs):
         """ Repeatedly executes a SQL statement. """
         pass
 
-    @func_logger
     def executescript(self, *args, **kwargs):
         """ Executes a multiple SQL statements at once. Non-standard. """
         pass
 
-    @func_logger
     def fetchall(self):
         """ Fetches all (remaining) rows from the buffer """
         self._rows, fetched = [], self._rows
         return fetched
 
-    @func_logger
     def fetchmany(self, size):
         """ Fetches n=size rows and removes them from the buffer """
         fetched = []
@@ -320,7 +236,6 @@ class Cursor:
             self._rows, fetched = [], self._rows
         return fetched
 
-    @func_logger
     def fetchone(self, *args, **kwargs):
         """ Fetches one row from the buffer """
         rows = self.fetchmany(1)
@@ -329,15 +244,12 @@ class Cursor:
             result = rows
             return result
         result = rows[0]
-        # log(f"#### fetch one result is {type(result)}  :  {result}")
         return result
 
-    @func_logger
     def setinputsizes(self, *args, **kwargs):
-        """ Required by DB-API. Does nothing in pysqlite. """
+        """ Required by DB-API """
         pass
 
-    @func_logger
     def setoutputsize(self, *args, **kwargs):
-        """ Required by DB-API. Does nothing in pysqlite. """
+        """ Required by DB-API """
         pass
