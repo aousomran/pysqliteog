@@ -87,7 +87,7 @@ class Connection:
 
     def execute(self, sql, params=None):
         """
-        for some reason the sqlite dbapi supports execute directly on the connection
+        for some reason the sqlite3 dbapi supports execute directly on the connection
         django also uses this when registering functions
         """
         cursor = self.cursor()
